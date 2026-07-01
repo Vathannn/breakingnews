@@ -1,0 +1,201 @@
+<?php
+/**
+ * Webshell Finder (PHP version)
+ * ==============================
+ * Tool defensif untuk memindai direktori (misalnya webroot) dan mencari
+ * file dengan ekstensi yang sering disalahgunakan untuk webshell:
+ * .php, .phtml, .shtml, .phar
+ *
+ * Deteksi TIDAK hanya berdasarkan ekstensi, tapi juga menghitung
+ * "skor risiko" berdasarkan pola-pola yang umum dipakai webshell.
+ *
+ * CARA PAKAI (dari CLI, bukan lewat browser):
+ *   php webshell_finder.php /path/to/webroot
+ *   php webshell_finder.php /path/to/webroot --min-score=3 --out=hasil.csv
+ *
+ * PENTING - KEAMANAN:
+ *  - Jalankan HANYA dari command line (CLI), jangan taruh di webroot
+ *    yang bisa diakses publik lewat browser, karena script ini punya
+ *    akses baca ke seluruh filesystem yang di-scan.
+ *  - Ini alat bantu triase, BUKAN pengganti antivirus/EDR.
+ *    Selalu verifikasi manual setiap file yang ditandai sebelum
+ *    menghapusnya, dan backup dulu sebelum bertindak.
+ */
+
+// --- Cegah eksekusi lewat web server ---
+if (php_sapi_name() !== 'cli') {
+    http_response_code(403);
+    die("Script ini hanya boleh dijalankan lewat CLI, bukan lewat browser.\n");
+}
+
+// --- Konfigurasi ---
+$EXTENSIONS = ['php', 'phtml', 'shtml', 'phar'];
+
+// Pola mencurigakan -> [regex, bobot skor, keterangan]
+$SIGNATURES = [
+    ['/\beval\s*\(/i', 3, 'eval()'],
+    ['/\bassert\s*\(\s*\$/i', 3, 'assert() dengan variabel (sering dipakai bypass eval)'],
+    ['/\bsystem\s*\(/i', 2, 'system()'],
+    ['/\bshell_exec\s*\(/i', 3, 'shell_exec()'],
+    ['/\bexec\s*\(/i', 2, 'exec()'],
+    ['/\bpassthru\s*\(/i', 2, 'passthru()'],
+    ['/\bpopen\s*\(/i', 2, 'popen()'],
+    ['/\bproc_open\s*\(/i', 2, 'proc_open()'],
+    ['/\bpcntl_exec\s*\(/i', 2, 'pcntl_exec()'],
+    ['/base64_decode\s*\(/i', 2, 'base64_decode()'],
+    ['/gzinflate\s*\(/i', 2, 'gzinflate() (indikasi obfuscation)'],
+    ['/gzuncompress\s*\(/i', 2, 'gzuncompress() (indikasi obfuscation)'],
+    ['/str_rot13\s*\(/i', 2, 'str_rot13() (indikasi obfuscation)'],
+    ['/\bcreate_function\s*\(/i', 2, 'create_function() (deprecated, sering disalahgunakan)'],
+    ['/\$_(GET|POST|REQUEST|COOKIE)\s*\[\s*[\'"].{1,20}[\'"]\s*\]\s*\(/i', 4, 'input user langsung dipanggil sebagai fungsi'],
+    ['/move_uploaded_file\s*\(/i', 1, 'move_uploaded_file() (perlu cek konteks)'],
+    ['/preg_replace\s*\(\s*[\'"][^\'"]*\/e[\'"]/i', 3, 'preg_replace dengan modifier /e (eksekusi kode)'],
+    ['/file_put_contents\s*\(.*\$_(GET|POST|REQUEST)/i', 3, 'menulis file dari input user'],
+    ['/chr\(\d+\)\s*\.\s*chr\(\d+\)(\s*\.\s*chr\(\d+\)){5,}/i', 2, 'obfuscation via chr() berantai panjang'],
+    ['/(c99|r57|wso|b374k|indoxploit|mini\s*shell|webshell|backdoor)/i', 2, 'nama/tag khas webshell ditemukan di isi file'],
+];
+
+$SUSPICIOUS_FILENAME_PARTS = [
+    'shell', 'c99', 'r57', 'wso', 'b374k', 'cmd', 'backdoor',
+    'mini', 'adminer', 'uploader', 'hack', 'priv8', 'config_bypass',
+];
+
+// --- Parse argumen CLI ---
+$args = $argv;
+array_shift($args); // buang nama script
+
+if (count($args) < 1) {
+    fwrite(STDERR, "Pemakaian: php webshell_finder.php <direktori> [--min-score=N] [--out=hasil.csv]\n");
+    exit(1);
+}
+
+$targetDir = null;
+$minScore = 2;
+$outFile = null;
+
+foreach ($args as $arg) {
+    if (strpos($arg, '--min-score=') === 0) {
+        $minScore = (int) substr($arg, strlen('--min-score='));
+    } elseif (strpos($arg, '--out=') === 0) {
+        $outFile = substr($arg, strlen('--out='));
+    } elseif ($targetDir === null) {
+        $targetDir = $arg;
+    }
+}
+
+if (!$targetDir || !is_dir($targetDir)) {
+    fwrite(STDERR, "[!] Direktori tidak ditemukan: {$targetDir}\n");
+    exit(1);
+}
+
+echo "[*] Memindai: {$targetDir}\n";
+echo "[*] Ekstensi target: " . implode(', ', $EXTENSIONS) . "\n";
+echo "[*] Mulai: " . date('c') . "\n\n";
+
+// --- Fungsi bantu ---
+function scanFile(string $path, array $signatures, array $suspiciousParts): array {
+    $content = @file_get_contents($path);
+    if ($content === false) {
+        return [null, ["Gagal baca file"]];
+    }
+
+    $score = 0;
+    $reasons = [];
+
+    foreach ($signatures as [$pattern, $weight, $desc]) {
+        if (preg_match($pattern, $content)) {
+            $score += $weight;
+            $reasons[] = $desc;
+        }
+    }
+
+    $fnameLower = strtolower(basename($path));
+    foreach ($suspiciousParts as $kw) {
+        if (strpos($fnameLower, $kw) !== false) {
+            $score += 2;
+            $reasons[] = "nama file mengandung kata kunci mencurigakan: '{$kw}'";
+            break;
+        }
+    }
+
+    if (strlen($content) < 300 && preg_match('/\b(eval|assert|system|shell_exec)\s*\(/i', $content)) {
+        $score += 2;
+        $reasons[] = "file sangat kecil namun berisi fungsi eksekusi kode (khas single-line shell)";
+    }
+
+    return [$score, $reasons];
+}
+
+function fileHashSafe(string $path): string {
+    $hash = @hash_file('sha256', $path);
+    return $hash !== false ? $hash : 'N/A';
+}
+
+// --- Walk direktori secara rekursif ---
+$results = [];
+$totalScanned = 0;
+
+$iterator = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator($targetDir, FilesystemIterator::SKIP_DOTS),
+    RecursiveIteratorIterator::SELF_FIRST
+);
+
+foreach ($iterator as $fileInfo) {
+    if (!$fileInfo->isFile()) {
+        continue;
+    }
+    $ext = strtolower($fileInfo->getExtension());
+    if (!in_array($ext, $EXTENSIONS, true)) {
+        continue;
+    }
+
+    $fullPath = $fileInfo->getPathname();
+    $totalScanned++;
+
+    [$score, $reasons] = scanFile($fullPath, $SIGNATURES, $SUSPICIOUS_FILENAME_PARTS);
+    if ($score === null) {
+        continue;
+    }
+
+    if ($score >= $minScore) {
+        $results[] = [
+            'path' => $fullPath,
+            'score' => $score,
+            'reasons' => implode('; ', $reasons),
+            'size_bytes' => $fileInfo->getSize(),
+            'modified' => date('c', $fileInfo->getMTime()),
+            'sha256' => fileHashSafe($fullPath),
+        ];
+    }
+}
+
+// Urutkan berdasarkan skor tertinggi
+usort($results, fn($a, $b) => $b['score'] <=> $a['score']);
+
+echo "[*] Total file dipindai (ekstensi cocok): {$totalScanned}\n";
+echo "[*] File mencurigakan (skor >= {$minScore}): " . count($results) . "\n\n";
+
+foreach ($results as $r) {
+    echo "[SKOR {$r['score']}] {$r['path']}\n";
+    echo "    Ukuran   : {$r['size_bytes']} bytes\n";
+    echo "    Diubah   : {$r['modified']}\n";
+    echo "    SHA256   : {$r['sha256']}\n";
+    echo "    Indikasi : {$r['reasons']}\n\n";
+}
+
+if ($outFile && count($results) > 0) {
+    $fp = fopen($outFile, 'w');
+    fputcsv($fp, ['path', 'score', 'reasons', 'size_bytes', 'modified', 'sha256']);
+    foreach ($results as $r) {
+        fputcsv($fp, [
+            $r['path'], $r['score'], $r['reasons'],
+            $r['size_bytes'], $r['modified'], $r['sha256'],
+        ]);
+    }
+    fclose($fp);
+    echo "[*] Hasil disimpan ke: {$outFile}\n";
+}
+
+if (count($results) === 0) {
+    echo "[*] Tidak ada file yang melewati ambang skor. Coba turunkan --min-score jika perlu.\n";
+}
